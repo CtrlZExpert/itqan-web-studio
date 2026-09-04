@@ -249,6 +249,32 @@ body {
 	line-height: 1.7;
 }
 
+.project-card>.project-image,
+.project-gallery .project-image {
+	display: block;
+	width: 100%;
+	border: 1px solid rgba(32, 40, 36, 0.12);
+	border-radius: .5rem;
+}
+
+.project-gallery {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+	margin-top: 2rem;
+	align-items: start;
+}
+
+.project-column {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.project-gallery>.project-image {
+	margin-bottom: 2rem;
+}
+
 .contact {
 	background-color: var(--charcoal);
 	color: var(--white);
@@ -405,6 +431,10 @@ body {
 
 	.project-card {
 		padding: 2rem;
+	}
+
+	.project-gallery {
+		grid-template-columns: 1fr;
 	}
 
 	.footer-inner {
