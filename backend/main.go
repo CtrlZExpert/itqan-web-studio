@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type ContactRequest struct {
-	Name    string
-	Email   string
-	Service string
-	Message string
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Service string `json:"service"`
+	Message string `json:"message"`
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -51,6 +52,12 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 			"error": "name, email, and message are required",
 		}
 		writeJSON(w, http.StatusBadRequest, response)
+	}
+	if !isValidEmail(data.Email) {
+		response := map[string]string{
+			"error": "invalid email address",
+		}
+		writeJSON(w, http.StatusBadRequest, response)
 		return
 	}
 
@@ -58,6 +65,21 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 		"message": "contact request received",
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func isValidEmail(email string) bool {
+	emailParts := strings.Split(email, "@")
+	if len(emailParts) != 2 {
+		return false
+	}
+	if emailParts[0] == "" || emailParts[1] == "" {
+		return false
+
+	}
+	if !strings.Contains(emailParts[1], ".") {
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
