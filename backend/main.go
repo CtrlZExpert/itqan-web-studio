@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
-	_ "modernc.org/sqlite"
 	"net/http"
+	"os"
 	"strings"
+
+	_ "modernc.org/sqlite"
 )
 
 type ContactRequest struct {
@@ -14,6 +18,13 @@ type ContactRequest struct {
 	Email   string `json:"email"`
 	Service string `json:"service"`
 	Message string `json:"message"`
+}
+
+type EmailRequest struct {
+	From    string   `json:"from"`
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Text    string   `json:"text"`
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -73,6 +84,11 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, response)
 
 			return
+		}
+
+		emailErr := sendContactEmail(data)
+		if emailErr != nil {
+			log.Println(emailErr)
 		}
 
 		response := map[string]string{
@@ -156,6 +172,56 @@ func saveContact(db *sql.DB, data ContactRequest) error {
 		return err
 	}
 
+	return nil
+}
+
+func sendContactEmail(data ContactRequest) error {
+	apiKey := os.Getenv("RESEND_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("RESEND_API_KEY is not set")
+	}
+
+	text := fmt.Sprintf(
+		"Name: %s\nEmail: %s\nService: %s\nMessage: %s\n",
+		data.Name,
+		data.Email,
+		data.Service,
+		data.Message,
+	)
+
+	email := EmailRequest{
+		From:    "Itqan Web Studio <onboarding@resend.dev>",
+		To:      []string{"itqanwebstudio@gmail.com"},
+		Subject: "New Itqan Contact Request",
+		Text:    text,
+	}
+
+	body, err := json.Marshal(email)
+	if err != nil {
+		return fmt.Errorf("failed to encode email request: w", err)
+	}
+
+	url := "https://api.resend.com/emails"
+	buf := bytes.NewBuffer(body)
+	req, err := http.NewRequest(http.MethodPost, url, buf)
+	if err != nil {
+		return fmt.Errorf("failed to request API: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("resend returned status %d", resp.StatusCode)
+	}
 	return nil
 }
 
