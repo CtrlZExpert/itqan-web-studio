@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
@@ -97,6 +98,26 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 
 		writeJSON(w, http.StatusOK, response)
 	}
+}
+
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		log.Fatal("ALLOWED_ORIGIN is not set")
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next(w, r)
+
+	}
+
 }
 
 func isValidEmail(email string) bool {
@@ -227,13 +248,18 @@ func sendContactEmail(data ContactRequest) error {
 
 func main() {
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal(err)
+
+	}
 	db := initDB()
 	defer db.Close()
 
 	http.HandleFunc("/api/health", healthHandler)
-	http.HandleFunc("/api/contact", contactHandler(db))
+	http.HandleFunc("/api/contact", corsMiddleware(contactHandler(db)))
 
-	err := http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

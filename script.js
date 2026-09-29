@@ -6,13 +6,19 @@ form.addEventListener("submit", async (event) => {
 	event.preventDefault();
 	formStatus.textContent = "Sending your message...";
 	try {
-		const formData = new FormData(form)
-		const response = await fetch(form.action, {
-			method: form.method,
-			body: formData,
+		const formData = {
+			name: form.name.value,
+			email: form.email.value,
+			message: form.message.value,
+		}
+		const response = await fetch("http://localhost:8080/api/contact", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(formData),
 		});
-		const result = await response.json();
-		if (result.success) {
+		if (response.ok) {
 			formStatus.textContent = "Thanks for reaching out! We'll be in touch soon.";
 			form.reset();
 		} else {
