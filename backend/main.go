@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
@@ -26,6 +29,11 @@ type EmailRequest struct {
 	To      []string `json:"to"`
 	Subject string   `json:"subject"`
 	Text    string   `json:"text"`
+}
+
+type RateLimitEntry struct {
+	Count       int
+	WindowStart time.Time
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -112,6 +120,56 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
+		}
+
+		next(w, r)
+
+	}
+
+}
+
+func RateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	visitors := make(map[string]RateLimitEntry)
+	var mu sync.Mutex
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		remoteAddr := r.RemoteAddr
+		host, _, err := net.SplitHostPort(remoteAddr)
+		if err != nil {
+			log.Println(err)
+			next(w, r)
+			return
+		}
+		mu.Lock()
+
+		entry, exists := visitors[host]
+		now := time.Now()
+		elapsed := now.Sub(entry.WindowStart)
+
+		if !exists {
+			entry = RateLimitEntry{
+				Count:       1,
+				WindowStart: now,
+			}
+			visitors[host] = entry
+		} else if elapsed >= 10*time.Minute {
+			entry = RateLimitEntry{
+				Count:       1,
+				WindowStart: now,
+			}
+			visitors[host] = entry
+		} else {
+
+			entry.Count++
+			visitors[host] = entry
+
+		}
+		mu.Unlock()
+
+		if entry.Count > 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+
 		}
 
 		next(w, r)
@@ -257,7 +315,7 @@ func main() {
 	defer db.Close()
 
 	http.HandleFunc("/api/health", healthHandler)
-	http.HandleFunc("/api/contact", corsMiddleware(contactHandler(db)))
+	http.HandleFunc("/api/contact", corsMiddleware(RateLimitMiddleware(contactHandler(db))))
 
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
