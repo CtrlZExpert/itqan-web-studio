@@ -21,6 +21,8 @@ form.addEventListener("submit", async (event) => {
 		if (response.ok) {
 			formStatus.textContent = "Thanks for reaching out! We'll be in touch soon.";
 			form.reset();
+		} else if (response.status === 429) {
+			formStatus.textContent = "Too many submission. Please wait 10 minutes and try again"
 		} else {
 
 			formStatus.textContent = "Something went wrong. Please try again or email us directly at itqanwebstudio@gmail.com";

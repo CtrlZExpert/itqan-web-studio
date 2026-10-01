@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -52,6 +53,7 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			response := map[string]string{
 				"error": "method not allowed",
 			}
+			slog.Warn("method not allowed", "method", r.Method)
 			writeJSON(w, http.StatusMethodNotAllowed, response)
 			return
 		}
@@ -66,6 +68,7 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			response := map[string]string{
 				"error": "invalid body",
 			}
+			slog.Warn("invalid contact request", "error", err)
 			writeJSON(w, http.StatusBadRequest, response)
 			return
 		}
@@ -73,6 +76,7 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			response := map[string]string{
 				"error": "name, email, and message are required",
 			}
+			slog.Warn("contact request missing required fields")
 			writeJSON(w, http.StatusBadRequest, response)
 			return
 		}
@@ -80,6 +84,7 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			response := map[string]string{
 				"error": "invalid email address",
 			}
+			slog.Warn("contact request has invalid email")
 			writeJSON(w, http.StatusBadRequest, response)
 			return
 		}
@@ -89,7 +94,7 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 			response := map[string]string{
 				"error": "failed to save contact",
 			}
-			log.Println(err)
+			slog.Error("failed to save contact", "error", err)
 			writeJSON(w, http.StatusInternalServerError, response)
 
 			return
@@ -97,13 +102,14 @@ func contactHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 
 		emailErr := sendContactEmail(data)
 		if emailErr != nil {
-			log.Println(emailErr)
+			slog.Error("failed to send contact email", "error", emailErr)
 		}
 
 		response := map[string]string{
 			"message": "contact request received",
 		}
 
+		slog.Info("contact request saved")
 		writeJSON(w, http.StatusOK, response)
 	}
 }
@@ -167,6 +173,7 @@ func RateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		mu.Unlock()
 
 		if entry.Count > 3 {
+			slog.Warn("contact rate limit exceeded", "ip", host)
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 
@@ -277,7 +284,7 @@ func sendContactEmail(data ContactRequest) error {
 
 	body, err := json.Marshal(email)
 	if err != nil {
-		return fmt.Errorf("failed to encode email request: w", err)
+		return fmt.Errorf("failed to encode email request: w")
 	}
 
 	url := "https://api.resend.com/emails"
@@ -316,6 +323,8 @@ func main() {
 
 	http.HandleFunc("/api/health", healthHandler)
 	http.HandleFunc("/api/contact", corsMiddleware(RateLimitMiddleware(contactHandler(db))))
+
+	slog.Info("server starting", "address", ":8080")
 
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
